@@ -97,10 +97,6 @@ def get_tweets_from_html_tag(root: lxml.html.HtmlElement):
                   map(lambda tag: tag.text_content(),
                       root.xpath("//div[@class='tweet']")))
 
-    # return filter(lambda text: text is not None,
-    #              map(lambda tag: lxml.html.tostring(tag.text_content(), method='text', encoding='utf-8'),
-    #                  root.xpath("//div[@class='tweet']")))
-
 
 def create_argparser() -> argparse.ArgumentParser:
     """引数パーサを作成"""
@@ -108,6 +104,8 @@ def create_argparser() -> argparse.ArgumentParser:
     parser.add_argument("url", metavar="URL", type=str, help="Togetter URL")
     parser.add_argument("-d", dest="directory", metavar="DST", type=str,
                         help="directory to write a result text.")
+    parser.add_argument("-c", dest="crawling", default=False,
+                        action='store_true', help="get tweets from crawled URL")
     return parser
 
 
@@ -116,6 +114,14 @@ def main():
     arg_parser = create_argparser()
     args = arg_parser.parse_args()
 
+    if args.crawling:
+        main_for_crawling(args)
+    else:
+        main_for_single_url(args)
+
+
+def main_for_single_url(args):
+    """単一ページからのまとめ取得"""
     import sys
     togetter_url = args.url
     tweets = get_tweets_from_url(togetter_url)
@@ -141,6 +147,27 @@ def main():
         # 標準出力へ
         for tweet in tweets:
             print(tweet)
+
+
+def main_for_crawling(args):
+    """指定URLからTogetter URLをクローリングして，個別にまとめを取得する"""
+    import copy
+    res = requests.get(args.url)
+    if res.status_code != 200:
+        return None
+
+    # 暫定処理: EUC-JP に決め打ち
+    content = res.content.decode("EUC-JP")
+    checked = set()
+    for result in TOGETTER_URL_PATTERN.finditer(content):
+        url = result.group(0)
+        if url in checked:
+            continue
+
+        checked.add(url)
+        tmp_args = copy.copy(args)
+        tmp_args.url = url
+        main_for_single_url(tmp_args)
 
 
 if __name__ == "__main__":
