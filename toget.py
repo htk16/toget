@@ -21,7 +21,9 @@ def get_tweets_from_url(url: str) -> list:
                 tweets.extend(new_tweets)
                 first_tweets = new_tweets if first_tweets is None else first_tweets  # 1ページ目のつぶやきをとっておく
                 page += 1
-    except:
+    except Exception as e:
+        import sys
+        print(type(e), e, file=sys.stderr)
         return None
 
 
@@ -62,9 +64,7 @@ def get_tweets(togetter_id: int, page: int=1) -> list:
     if res.status_code != 200:
         return None
     root = lxml.html.fromstring(res.content)
-    tweets = list(
-        filter(lambda text: text is not None,
-               map(lambda tag: tag.text, root.xpath("//div[@class='tweet']"))))
+    tweets = list(get_tweets_from_html_tag(root))
 
     # 続きを読むが存在するなら取得する
     try:
@@ -82,14 +82,24 @@ def get_tweets(togetter_id: int, page: int=1) -> list:
                                             headers=headers, data=payload, cookies=cookies)
 
             root_more_tweets = lxml.html.fromstring(res_more_tweets.content.decode("UTF-8"))
-            more_tweets = list(filter(lambda text: text is not None,
-                                      map(lambda tag: tag.text, root_more_tweets.xpath("//div[@class='tweet']"))))
+            more_tweets = list(get_tweets_from_html_tag(root_more_tweets))
             tweets += more_tweets
     except:
         # 指定したページがそもそも存在していない可能性が高い
         return None
 
     return tweets
+
+
+def get_tweets_from_html_tag(root: lxml.html.HtmlElement):
+    """あるhtml要素からつぶやきを取得する"""
+    return filter(lambda text: text is not None,
+                  map(lambda tag: tag.text_content(),
+                      root.xpath("//div[@class='tweet']")))
+
+    # return filter(lambda text: text is not None,
+    #              map(lambda tag: lxml.html.tostring(tag.text_content(), method='text', encoding='utf-8'),
+    #                  root.xpath("//div[@class='tweet']")))
 
 
 def create_argparser() -> argparse.ArgumentParser:
@@ -125,7 +135,8 @@ def main():
         assert(os.path.isabs(output_file_path))
 
         with open(output_file_path, "w") as f:
-            f.writelines(tweets)
+            for tweet in tweets:
+                print(tweet, file=f)
     else:
         # 標準出力へ
         for tweet in tweets:
